@@ -6,6 +6,7 @@ go_library(
         "client.go",
         "default_retryer.go",
         "logger.go",
+        "no_op_retryer.go",
     ],
     importmap = "k8s.io/kubernetes/vendor/github.com/aws/aws-sdk-go/aws/client",
     importpath = "github.com/aws/aws-sdk-go/aws/client",
@@ -14,6 +15,7 @@ go_library(
         "//vendor/github.com/aws/aws-sdk-go/aws:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws/client/metadata:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws/request:go_default_library",
+        "//vendor/github.com/aws/aws-sdk-go/internal/sdkrand:go_default_library",
     ],
 )
 

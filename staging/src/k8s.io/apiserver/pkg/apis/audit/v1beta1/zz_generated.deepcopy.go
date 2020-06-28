@@ -22,7 +22,7 @@ package v1beta1
 
 import (
 	v1 "k8s.io/api/authentication/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -50,7 +50,7 @@ func (in *Event) DeepCopyInto(out *Event) {
 	}
 	if in.ResponseStatus != nil {
 		in, out := &in.ResponseStatus, &out.ResponseStatus
-		*out = new(meta_v1.Status)
+		*out = new(metav1.Status)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.RequestObject != nil {
@@ -97,7 +97,7 @@ func (in *Event) DeepCopyObject() runtime.Object {
 func (in *EventList) DeepCopyInto(out *EventList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]Event, len(*in))
@@ -210,7 +210,7 @@ func (in *Policy) DeepCopyObject() runtime.Object {
 func (in *PolicyList) DeepCopyInto(out *PolicyList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]Policy, len(*in))

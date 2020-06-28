@@ -20,8 +20,8 @@ sh_binary(
     name = "test-cmd",
     srcs = ["test-cmd.sh"],
     deps = [
-        ":test-cmd-util",
         "//hack/lib",
+        "//test/cmd:legacy-script",
     ],
 )
 
@@ -36,14 +36,6 @@ sh_binary(
 sh_binary(
     name = "test-integration",
     srcs = ["test-cmd.sh"],
-    deps = [
-        "//hack/lib",
-    ],
-)
-
-sh_binary(
-    name = "test-kubeadm-cmd",
-    srcs = ["test-kubeadm-cmd.sh"],
     deps = [
         "//hack/lib",
     ],
@@ -87,14 +79,6 @@ sh_binary(
     deps = [
         "//hack/lib",
     ],
-)
-
-sh_library(
-    name = "test-cmd-util",
-    srcs = [
-        "test-cmd-util.sh",
-    ],
-    data = ["//pkg/kubectl/validation:testdata/v1/validPod.yaml"],
 )
 
 filegroup(

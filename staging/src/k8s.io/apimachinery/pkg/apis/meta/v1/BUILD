@@ -16,6 +16,7 @@ go_test(
         "helpers_test.go",
         "labels_test.go",
         "micro_time_test.go",
+        "options_test.go",
         "time_test.go",
         "types_test.go",
     ],
@@ -25,7 +26,10 @@ go_test(
         "//staging/src/k8s.io/apimachinery/pkg/labels:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/runtime/schema:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/runtime/serializer/json:go_default_library",
-        "//vendor/github.com/ghodss/yaml:go_default_library",
+        "//staging/src/k8s.io/apimachinery/pkg/types:go_default_library",
+        "//staging/src/k8s.io/apimachinery/pkg/util/diff:go_default_library",
+        "//vendor/github.com/google/gofuzz:go_default_library",
+        "//vendor/sigs.k8s.io/yaml:go_default_library",
     ],
 )
 
@@ -34,6 +38,7 @@ go_library(
     srcs = [
         "controller_ref.go",
         "conversion.go",
+        "deepcopy.go",
         "doc.go",
         "duration.go",
         "generated.pb.go",
@@ -49,6 +54,7 @@ go_library(
         "types.go",
         "types_swagger_doc_generated.go",
         "watch.go",
+        "zz_generated.conversion.go",
         "zz_generated.deepcopy.go",
         "zz_generated.defaults.go",
     ],
@@ -64,6 +70,7 @@ go_library(
         "//staging/src/k8s.io/apimachinery/pkg/selection:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/types:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/util/intstr:go_default_library",
+        "//staging/src/k8s.io/apimachinery/pkg/util/runtime:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/watch:go_default_library",
         "//vendor/github.com/gogo/protobuf/proto:go_default_library",
         "//vendor/github.com/gogo/protobuf/sortkeys:go_default_library",

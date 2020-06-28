@@ -21,7 +21,7 @@ limitations under the License.
 package v1beta2
 
 import (
-	core_v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
@@ -58,7 +58,7 @@ func (in *ControllerRevision) DeepCopyObject() runtime.Object {
 func (in *ControllerRevisionList) DeepCopyInto(out *ControllerRevisionList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]ControllerRevision, len(*in))
@@ -136,7 +136,7 @@ func (in *DaemonSetCondition) DeepCopy() *DaemonSetCondition {
 func (in *DaemonSetList) DeepCopyInto(out *DaemonSetList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]DaemonSet, len(*in))
@@ -292,7 +292,7 @@ func (in *DeploymentCondition) DeepCopy() *DeploymentCondition {
 func (in *DeploymentList) DeepCopyInto(out *DeploymentList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]Deployment, len(*in))
@@ -457,7 +457,7 @@ func (in *ReplicaSetCondition) DeepCopy() *ReplicaSetCondition {
 func (in *ReplicaSetList) DeepCopyInto(out *ReplicaSetList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]ReplicaSet, len(*in))
@@ -720,7 +720,7 @@ func (in *StatefulSetCondition) DeepCopy() *StatefulSetCondition {
 func (in *StatefulSetList) DeepCopyInto(out *StatefulSetList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]StatefulSet, len(*in))
@@ -765,7 +765,7 @@ func (in *StatefulSetSpec) DeepCopyInto(out *StatefulSetSpec) {
 	in.Template.DeepCopyInto(&out.Template)
 	if in.VolumeClaimTemplates != nil {
 		in, out := &in.VolumeClaimTemplates, &out.VolumeClaimTemplates
-		*out = make([]core_v1.PersistentVolumeClaim, len(*in))
+		*out = make([]corev1.PersistentVolumeClaim, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

@@ -17,9 +17,10 @@ limitations under the License.
 package generator
 
 import (
+	"go/token"
 	"strings"
 
-	"github.com/golang/glog"
+	"k8s.io/klog/v2"
 
 	"k8s.io/gengo/namer"
 	"k8s.io/gengo/types"
@@ -42,21 +43,26 @@ func golangTrackerLocalName(tracker namer.ImportTracker, t types.Name) string {
 	// Using backslashes in package names causes gengo to produce Go code which
 	// will not compile with the gc compiler. See the comment on GoSeperator.
 	if strings.ContainsRune(path, '\\') {
-		glog.Warningf("Warning: backslash used in import path '%v', this is unsupported.\n", path)
+		klog.Warningf("Warning: backslash used in import path '%v', this is unsupported.\n", path)
 	}
 
 	dirs := strings.Split(path, namer.GoSeperator)
 	for n := len(dirs) - 1; n >= 0; n-- {
-		// TODO: bikeshed about whether it's more readable to have an
-		// _, something else, or nothing between directory names.
-		name := strings.Join(dirs[n:], "_")
+		// follow kube convention of not having anything between directory names
+		name := strings.Join(dirs[n:], "")
+		name = strings.Replace(name, "_", "", -1)
 		// These characters commonly appear in import paths for go
 		// packages, but aren't legal go names. So we'll sanitize.
-		name = strings.Replace(name, ".", "_", -1)
-		name = strings.Replace(name, "-", "_", -1)
+		name = strings.Replace(name, ".", "", -1)
+		name = strings.Replace(name, "-", "", -1)
 		if _, found := tracker.PathOf(name); found {
 			// This name collides with some other package
 			continue
+		}
+
+		// If the import name is a Go keyword, prefix with an underscore.
+		if token.Lookup(name).IsKeyword() {
+			name = "_" + name
 		}
 		return name
 	}

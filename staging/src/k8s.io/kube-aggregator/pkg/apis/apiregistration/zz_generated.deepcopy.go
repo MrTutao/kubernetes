@@ -73,7 +73,7 @@ func (in *APIServiceCondition) DeepCopy() *APIServiceCondition {
 func (in *APIServiceList) DeepCopyInto(out *APIServiceList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]APIService, len(*in))
@@ -157,9 +157,7 @@ func (in ByGroupPriorityMinimum) DeepCopyInto(out *ByGroupPriorityMinimum) {
 		in := &in
 		*out = make(ByGroupPriorityMinimum, len(*in))
 		for i := range *in {
-			if (*in)[i] == nil {
-				(*out)[i] = nil
-			} else {
+			if (*in)[i] != nil {
 				in, out := &(*in)[i], &(*out)[i]
 				*out = new(APIService)
 				(*in).DeepCopyInto(*out)
@@ -185,9 +183,7 @@ func (in ByVersionPriority) DeepCopyInto(out *ByVersionPriority) {
 		in := &in
 		*out = make(ByVersionPriority, len(*in))
 		for i := range *in {
-			if (*in)[i] == nil {
-				(*out)[i] = nil
-			} else {
+			if (*in)[i] != nil {
 				in, out := &(*in)[i], &(*out)[i]
 				*out = new(APIService)
 				(*in).DeepCopyInto(*out)
