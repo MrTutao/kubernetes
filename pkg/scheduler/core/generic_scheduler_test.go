@@ -18,10 +18,11 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
-	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,18 +35,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	clientsetfake "k8s.io/client-go/kubernetes/fake"
+	pvutil "k8s.io/kubernetes/pkg/controller/volume/persistentvolume/util"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/apis/config"
+	"k8s.io/kubernetes/pkg/scheduler/framework"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/defaultbinder"
-	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/defaultpodtopologyspread"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/noderesources"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/podtopologyspread"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/queuesort"
+	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/selectorspread"
+	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/volumebinding"
 	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
-	framework "k8s.io/kubernetes/pkg/scheduler/framework/v1alpha1"
-	fakeframework "k8s.io/kubernetes/pkg/scheduler/framework/v1alpha1/fake"
 	internalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
 	internalqueue "k8s.io/kubernetes/pkg/scheduler/internal/queue"
-	"k8s.io/kubernetes/pkg/scheduler/profile"
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
 	schedutil "k8s.io/kubernetes/pkg/scheduler/util"
 )
@@ -70,14 +71,14 @@ func (pl *noPodsFilterPlugin) Filter(_ context.Context, _ *framework.CycleState,
 }
 
 // NewNoPodsFilterPlugin initializes a noPodsFilterPlugin and returns it.
-func NewNoPodsFilterPlugin(_ runtime.Object, _ framework.FrameworkHandle) (framework.Plugin, error) {
+func NewNoPodsFilterPlugin(_ runtime.Object, _ framework.Handle) (framework.Plugin, error) {
 	return &noPodsFilterPlugin{}, nil
 }
 
 type numericMapPlugin struct{}
 
 func newNumericMapPlugin() frameworkruntime.PluginFactory {
-	return func(_ runtime.Object, _ framework.FrameworkHandle) (framework.Plugin, error) {
+	return func(_ runtime.Object, _ framework.Handle) (framework.Plugin, error) {
 		return &numericMapPlugin{}, nil
 	}
 }
@@ -101,7 +102,7 @@ func (pl *numericMapPlugin) ScoreExtensions() framework.ScoreExtensions {
 type reverseNumericMapPlugin struct{}
 
 func newReverseNumericMapPlugin() frameworkruntime.PluginFactory {
-	return func(_ runtime.Object, _ framework.FrameworkHandle) (framework.Plugin, error) {
+	return func(_ runtime.Object, _ framework.Handle) (framework.Plugin, error) {
 		return &reverseNumericMapPlugin{}, nil
 	}
 }
@@ -142,7 +143,7 @@ func (pl *reverseNumericMapPlugin) NormalizeScore(_ context.Context, _ *framewor
 type trueMapPlugin struct{}
 
 func newTrueMapPlugin() frameworkruntime.PluginFactory {
-	return func(_ runtime.Object, _ framework.FrameworkHandle) (framework.Plugin, error) {
+	return func(_ runtime.Object, _ framework.Handle) (framework.Plugin, error) {
 		return &trueMapPlugin{}, nil
 	}
 }
@@ -171,7 +172,7 @@ func (pl *trueMapPlugin) NormalizeScore(_ context.Context, _ *framework.CycleSta
 type falseMapPlugin struct{}
 
 func newFalseMapPlugin() frameworkruntime.PluginFactory {
-	return func(_ runtime.Object, _ framework.FrameworkHandle) (framework.Plugin, error) {
+	return func(_ runtime.Object, _ framework.Handle) (framework.Plugin, error) {
 		return &falseMapPlugin{}, nil
 	}
 }
@@ -418,13 +419,19 @@ func TestGenericScheduler(t *testing.T) {
 			// Pod with existing PVC
 			registerPlugins: []st.RegisterPluginFunc{
 				st.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
+				st.RegisterPreFilterPlugin(volumebinding.Name, volumebinding.New),
 				st.RegisterFilterPlugin("TrueFilter", st.NewTrueFilterPlugin),
 				st.RegisterBindPlugin(defaultbinder.Name, defaultbinder.New),
 			},
 			nodes: []string{"machine1", "machine2"},
-			pvcs:  []v1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "existingPVC"}}},
+			pvcs: []v1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "existingPVC", UID: types.UID("existingPVC"), Namespace: v1.NamespaceDefault},
+					Spec:       v1.PersistentVolumeClaimSpec{VolumeName: "existingPV"},
+				},
+			},
 			pod: &v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: "ignore", UID: types.UID("ignore")},
+				ObjectMeta: metav1.ObjectMeta{Name: "ignore", UID: types.UID("ignore"), Namespace: v1.NamespaceDefault},
 				Spec: v1.PodSpec{
 					Volumes: []v1.Volume{
 						{
@@ -445,6 +452,7 @@ func TestGenericScheduler(t *testing.T) {
 			// Pod with non existing PVC
 			registerPlugins: []st.RegisterPluginFunc{
 				st.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
+				st.RegisterPreFilterPlugin(volumebinding.Name, volumebinding.New),
 				st.RegisterFilterPlugin("TrueFilter", st.NewTrueFilterPlugin),
 				st.RegisterBindPlugin(defaultbinder.Name, defaultbinder.New),
 			},
@@ -470,13 +478,14 @@ func TestGenericScheduler(t *testing.T) {
 			// Pod with deleting PVC
 			registerPlugins: []st.RegisterPluginFunc{
 				st.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
+				st.RegisterPreFilterPlugin(volumebinding.Name, volumebinding.New),
 				st.RegisterFilterPlugin("TrueFilter", st.NewTrueFilterPlugin),
 				st.RegisterBindPlugin(defaultbinder.Name, defaultbinder.New),
 			},
 			nodes: []string{"machine1", "machine2"},
-			pvcs:  []v1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "existingPVC", DeletionTimestamp: &metav1.Time{}}}},
+			pvcs:  []v1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "existingPVC", UID: types.UID("existingPVC"), Namespace: v1.NamespaceDefault, DeletionTimestamp: &metav1.Time{}}}},
 			pod: &v1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: "ignore", UID: types.UID("ignore")},
+				ObjectMeta: metav1.ObjectMeta{Name: "ignore", UID: types.UID("ignore"), Namespace: v1.NamespaceDefault},
 				Spec: v1.PodSpec{
 					Volumes: []v1.Volume{
 						{
@@ -503,7 +512,7 @@ func TestGenericScheduler(t *testing.T) {
 			nodes: []string{"2", "1"},
 			pod:   &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "2"}},
 			name:  "test error with priority map",
-			wErr:  fmt.Errorf("error while running score plugin for pod \"2\": %+v", errPrioritize),
+			wErr:  fmt.Errorf("running Score plugins: %w", fmt.Errorf(`plugin "FalseMap" failed with: %w`, errPrioritize)),
 		},
 		{
 			name: "test podtopologyspread plugin - 2 nodes with maxskew=1",
@@ -677,6 +686,43 @@ func TestGenericScheduler(t *testing.T) {
 			expectedHosts: nil,
 			wErr:          nil,
 		},
+		{
+			name: "test prefilter plugin returning Unschedulable status",
+			registerPlugins: []st.RegisterPluginFunc{
+				st.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
+				st.RegisterPreFilterPlugin(
+					"FakePreFilter",
+					st.NewFakePreFilterPlugin(framework.NewStatus(framework.UnschedulableAndUnresolvable, "injected unschedulable status")),
+				),
+				st.RegisterBindPlugin(defaultbinder.Name, defaultbinder.New),
+			},
+			nodes:         []string{"1", "2"},
+			pod:           &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-prefilter", UID: types.UID("test-prefilter")}},
+			expectedHosts: nil,
+			wErr: &FitError{
+				Pod:         &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-prefilter", UID: types.UID("test-prefilter")}},
+				NumAllNodes: 2,
+				FilteredNodesStatuses: framework.NodeToStatusMap{
+					"1": framework.NewStatus(framework.UnschedulableAndUnresolvable, "injected unschedulable status"),
+					"2": framework.NewStatus(framework.UnschedulableAndUnresolvable, "injected unschedulable status"),
+				},
+			},
+		},
+		{
+			name: "test prefilter plugin returning error status",
+			registerPlugins: []st.RegisterPluginFunc{
+				st.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
+				st.RegisterPreFilterPlugin(
+					"FakePreFilter",
+					st.NewFakePreFilterPlugin(framework.NewStatus(framework.Error, "injected error status")),
+				),
+				st.RegisterBindPlugin(defaultbinder.Name, defaultbinder.New),
+			},
+			nodes:         []string{"1", "2"},
+			pod:           &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-prefilter", UID: types.UID("test-prefilter")}},
+			expectedHosts: nil,
+			wErr:          fmt.Errorf(`running PreFilter plugin "FakePreFilter": %w`, errors.New("injected error status")),
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -691,32 +737,39 @@ func TestGenericScheduler(t *testing.T) {
 				cache.AddNode(node)
 			}
 
+			ctx := context.Background()
+			cs := clientsetfake.NewSimpleClientset()
+			informerFactory := informers.NewSharedInformerFactory(cs, 0)
+			for _, pvc := range test.pvcs {
+				metav1.SetMetaDataAnnotation(&pvc.ObjectMeta, pvutil.AnnBindCompleted, "true")
+				cs.CoreV1().PersistentVolumeClaims(pvc.Namespace).Create(ctx, &pvc, metav1.CreateOptions{})
+				if pvName := pvc.Spec.VolumeName; pvName != "" {
+					pv := v1.PersistentVolume{ObjectMeta: metav1.ObjectMeta{Name: pvName}}
+					cs.CoreV1().PersistentVolumes().Create(ctx, &pv, metav1.CreateOptions{})
+				}
+			}
 			snapshot := internalcache.NewSnapshot(test.pods, nodes)
 			fwk, err := st.NewFramework(
 				test.registerPlugins,
 				frameworkruntime.WithSnapshotSharedLister(snapshot),
+				frameworkruntime.WithInformerFactory(informerFactory),
 				frameworkruntime.WithPodNominator(internalqueue.NewPodNominator()),
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			prof := &profile.Profile{
-				Framework: fwk,
-			}
-
-			var pvcs []v1.PersistentVolumeClaim
-			pvcs = append(pvcs, test.pvcs...)
-			pvcLister := fakeframework.PersistentVolumeClaimLister(pvcs)
 
 			scheduler := NewGenericScheduler(
 				cache,
 				snapshot,
 				[]framework.Extender{},
-				pvcLister,
-				false,
-				schedulerapi.DefaultPercentageOfNodesToScore)
-			result, err := scheduler.Schedule(context.Background(), prof, framework.NewCycleState(), test.pod)
-			if !reflect.DeepEqual(err, test.wErr) {
+				schedulerapi.DefaultPercentageOfNodesToScore,
+			)
+			informerFactory.Start(ctx.Done())
+			informerFactory.WaitForCacheSync(ctx.Done())
+
+			result, err := scheduler.Schedule(ctx, fwk, framework.NewCycleState(), test.pod)
+			if err != test.wErr && !strings.Contains(err.Error(), test.wErr.Error()) {
 				t.Errorf("Unexpected error: %v, expected: %v", err.Error(), test.wErr)
 			}
 			if test.expectedHosts != nil && !test.expectedHosts.Has(result.SuggestedHost) {
@@ -739,7 +792,7 @@ func makeScheduler(nodes []*v1.Node) *genericScheduler {
 	s := NewGenericScheduler(
 		cache,
 		emptySnapshot,
-		nil, nil, false,
+		nil,
 		schedulerapi.DefaultPercentageOfNodesToScore)
 	cache.UpdateSnapshot(s.(*genericScheduler).nodeInfoSnapshot)
 	return s.(*genericScheduler)
@@ -760,9 +813,8 @@ func TestFindFitAllError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prof := &profile.Profile{Framework: fwk}
 
-	_, nodeToStatusMap, err := scheduler.findNodesThatFitPod(context.Background(), prof, framework.NewCycleState(), &v1.Pod{})
+	_, nodeToStatusMap, err := scheduler.findNodesThatFitPod(context.Background(), fwk, framework.NewCycleState(), &v1.Pod{})
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -801,10 +853,9 @@ func TestFindFitSomeError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prof := &profile.Profile{Framework: fwk}
 
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "1", UID: types.UID("1")}}
-	_, nodeToStatusMap, err := scheduler.findNodesThatFitPod(context.Background(), prof, framework.NewCycleState(), pod)
+	_, nodeToStatusMap, err := scheduler.findNodesThatFitPod(context.Background(), fwk, framework.NewCycleState(), pod)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -855,7 +906,7 @@ func TestFindFitPredicateCallCounts(t *testing.T) {
 		plugin := st.FakeFilterPlugin{}
 		registerFakeFilterFunc := st.RegisterFilterPlugin(
 			"FakeFilter",
-			func(_ runtime.Object, fh framework.FrameworkHandle) (framework.Plugin, error) {
+			func(_ runtime.Object, fh framework.Handle) (framework.Plugin, error) {
 				return &plugin, nil
 			},
 		)
@@ -871,7 +922,6 @@ func TestFindFitPredicateCallCounts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		prof := &profile.Profile{Framework: fwk}
 
 		scheduler := makeScheduler(nodes)
 		if err := scheduler.cache.UpdateSnapshot(scheduler.nodeInfoSnapshot); err != nil {
@@ -879,7 +929,7 @@ func TestFindFitPredicateCallCounts(t *testing.T) {
 		}
 		fwk.PreemptHandle().AddNominatedPod(&v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: "nominated"}, Spec: v1.PodSpec{Priority: &midPriority}}, "1")
 
-		_, _, err = scheduler.findNodesThatFitPod(context.Background(), prof, framework.NewCycleState(), test.pod)
+		_, _, err = scheduler.findNodesThatFitPod(context.Background(), fwk, framework.NewCycleState(), test.pod)
 
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -1013,8 +1063,8 @@ func TestZeroRequest(t *testing.T) {
 				st.RegisterQueueSortPlugin(queuesort.Name, queuesort.New),
 				st.RegisterScorePlugin(noderesources.LeastAllocatedName, noderesources.NewLeastAllocated, 1),
 				st.RegisterScorePlugin(noderesources.BalancedAllocationName, noderesources.NewBalancedAllocation, 1),
-				st.RegisterScorePlugin(defaultpodtopologyspread.Name, defaultpodtopologyspread.New, 1),
-				st.RegisterPreScorePlugin(defaultpodtopologyspread.Name, defaultpodtopologyspread.New),
+				st.RegisterScorePlugin(selectorspread.Name, selectorspread.New, 1),
+				st.RegisterPreScorePlugin(selectorspread.Name, selectorspread.New),
 				st.RegisterBindPlugin(defaultbinder.Name, defaultbinder.New),
 			}
 			fwk, err := st.NewFramework(
@@ -1027,25 +1077,22 @@ func TestZeroRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error creating framework: %+v", err)
 			}
-			prof := &profile.Profile{Framework: fwk}
 
 			scheduler := NewGenericScheduler(
 				nil,
 				emptySnapshot,
 				[]framework.Extender{},
-				nil,
-				false,
 				schedulerapi.DefaultPercentageOfNodesToScore).(*genericScheduler)
 			scheduler.nodeInfoSnapshot = snapshot
 
 			ctx := context.Background()
 			state := framework.NewCycleState()
-			_, _, err = scheduler.findNodesThatFitPod(ctx, prof, state, test.pod)
+			_, _, err = scheduler.findNodesThatFitPod(ctx, fwk, state, test.pod)
 			if err != nil {
 				t.Fatalf("error filtering nodes: %+v", err)
 			}
-			prof.RunPreScorePlugins(ctx, state, test.pod, test.nodes)
-			list, err := scheduler.prioritizeNodes(ctx, prof, state, test.pod, test.nodes)
+			fwk.RunPreScorePlugins(ctx, state, test.pod, test.nodes)
+			list, err := scheduler.prioritizeNodes(ctx, fwk, state, test.pod, test.nodes)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -1132,14 +1179,14 @@ func TestFairEvaluationForNodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prof := &profile.Profile{Framework: fwk}
+
 	// To make numAllNodes % nodesToFind != 0
 	g.percentageOfNodesToScore = 30
 	nodesToFind := int(g.numFeasibleNodesToFind(int32(numAllNodes)))
 
 	// Iterating over all nodes more than twice
 	for i := 0; i < 2*(numAllNodes/nodesToFind+1); i++ {
-		nodesThatFit, _, err := g.findNodesThatFitPod(context.Background(), prof, framework.NewCycleState(), &v1.Pod{})
+		nodesThatFit, _, err := g.findNodesThatFitPod(context.Background(), fwk, framework.NewCycleState(), &v1.Pod{})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}

@@ -17,15 +17,13 @@ limitations under the License.
 package algorithmprovider
 
 import (
-	"sort"
-	"strings"
+	"fmt"
 
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/features"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/defaultbinder"
-	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/defaultpodtopologyspread"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/defaultpreemption"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/imagelocality"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/interpodaffinity"
@@ -38,6 +36,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/nodevolumelimits"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/podtopologyspread"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/queuesort"
+	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/selectorspread"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/tainttoleration"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/volumebinding"
 	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/volumerestrictions"
@@ -66,13 +65,7 @@ func NewRegistry() Registry {
 
 // ListAlgorithmProviders lists registered algorithm providers.
 func ListAlgorithmProviders() string {
-	r := NewRegistry()
-	var providers []string
-	for k := range r {
-		providers = append(providers, k)
-	}
-	sort.Strings(providers)
-	return strings.Join(providers, " | ")
+	return fmt.Sprintf("%s | %s", ClusterAutoscalerProvider, schedulerapi.SchedulerDefaultProviderName)
 }
 
 func getDefaultConfig() *schedulerapi.Plugins {
@@ -94,12 +87,12 @@ func getDefaultConfig() *schedulerapi.Plugins {
 		Filter: &schedulerapi.PluginSet{
 			Enabled: []schedulerapi.Plugin{
 				{Name: nodeunschedulable.Name},
-				{Name: noderesources.FitName},
 				{Name: nodename.Name},
-				{Name: nodeports.Name},
-				{Name: nodeaffinity.Name},
-				{Name: volumerestrictions.Name},
 				{Name: tainttoleration.Name},
+				{Name: nodeaffinity.Name},
+				{Name: nodeports.Name},
+				{Name: noderesources.FitName},
+				{Name: volumerestrictions.Name},
 				{Name: nodevolumelimits.EBSName},
 				{Name: nodevolumelimits.GCEPDName},
 				{Name: nodevolumelimits.CSIName},
@@ -170,8 +163,8 @@ func applyFeatureGates(config *schedulerapi.Plugins) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.DefaultPodTopologySpread) {
 		// When feature is enabled, the default spreading is done by
 		// PodTopologySpread plugin, which is enabled by default.
-		klog.Infof("Registering DefaultPodTopologySpread plugin")
-		s := schedulerapi.Plugin{Name: defaultpodtopologyspread.Name}
+		klog.Infof("Registering SelectorSpread plugin")
+		s := schedulerapi.Plugin{Name: selectorspread.Name}
 		config.PreScore.Enabled = append(config.PreScore.Enabled, s)
 		s.Weight = 1
 		config.Score.Enabled = append(config.Score.Enabled, s)

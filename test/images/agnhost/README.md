@@ -40,7 +40,7 @@ For example, let's consider the following `pod.yaml` file:
       containers:
       - args:
         - dns-suffix
-        image: us.gcr.io/k8s-artifacts-prod/e2e-test-images/agnhost:2.14
+        image: k8s.gcr.io/e2e-test-images/agnhost:2.14
         name: agnhost
       dnsConfig:
         nameservers:
@@ -209,7 +209,7 @@ Usage:
 
 ```console
 guestbook="test/e2e/testing-manifests/guestbook"
-sed_expr="s|{{.AgnhostImage}}|us.gcr.io/k8s-artifacts-prod/e2e-test-images/agnhost:2.14|"
+sed_expr="s|{{.AgnhostImage}}|k8s.gcr.io/e2e-test-images/agnhost:2.14|"
 
 # create the services.
 kubectl create -f ${guestbook}/frontend-service.yaml
@@ -292,14 +292,14 @@ Examples:
 
 ```console
 docker run -i \
-  us.gcr.io/k8s-artifacts-prod/e2e-test-images/agnhost:2.14 \
+  k8s.gcr.io/e2e-test-images/agnhost:2.14 \
   logs-generator --log-lines-total 10 --run-duration 1s
 ```
 
 ```console
 kubectl run logs-generator \
   --generator=run-pod/v1 \
-  --image=us.gcr.io/k8s-artifacts-prod/e2e-test-images/agnhost:2.14 \
+  --image=k8s.gcr.io/e2e-test-images/agnhost:2.14 \
   --restart=Never \
   -- logs-generator -t 10 -d 1s
 ```
@@ -393,7 +393,7 @@ Starts a HTTP(S) server on given port with the following endpoints:
   - `protocol`: The protocol which will be used when making the request. Default value: `http`.
     Acceptable values: `http`, `udp`, `sctp`.
   - `tries`: The number of times the request will be performed. Default value: `1`.
-- `/echo`: Returns the given `msg` (`/echo?msg=echoed_msg`)
+- `/echo`: Returns the given `msg` (`/echo?msg=echoed_msg`), with the optional status `code`.
 - `/exit`: Closes the server with the given code and graceful shutdown. The endpoint's parameters
 	are:
 	- `code`: The exit code for the process. Default value: 0. Allows an integer [0-127].
@@ -407,6 +407,8 @@ Starts a HTTP(S) server on given port with the following endpoints:
   it exited.
 - `/hostname`: Returns the server's hostname.
 - `/hostName`: Returns the server's hostname.
+- `/redirect`: Returns a redirect response to the given `location`, with the optional status `code`
+  (`/redirect?location=/echo%3Fmsg=foobar&code=307`).
 - `/shell`: Executes the given `shellCommand` or `cmd` (`/shell?cmd=some-command`) and
   returns a JSON containing the fields `output` (command's output) and `error` (command's
   error message). Returns `200 OK` if the command succeeded, `417 Expectation Failed` if not.
@@ -418,6 +420,9 @@ Starts a HTTP(S) server on given port with the following endpoints:
 If `--tls-cert-file` is added (ideally in conjunction with `--tls-private-key-file`, the HTTP server
 will be upgraded to HTTPS. The image has default, `localhost`-based cert/privkey files at
 `/localhost.crt` and `/localhost.key` (see: [`porter` subcommand](#porter))
+
+If `--http-override` is set, the HTTP(S) server will always serve the override path & options,
+ignoring the request URL.
 
 It will also start a UDP server on the indicated UDP port that responds to the following commands:
 
@@ -476,7 +481,7 @@ Usage:
 ```console
     kubectl run test-agnhost \
       --generator=run-pod/v1 \
-      --image=us.gcr.io/k8s-artifacts-prod/e2e-test-images/agnhost:2.14 \
+      --image=k8s.gcr.io/e2e-test-images/agnhost:2.14 \
       --restart=Never \
       --env "POD_IP=<POD_IP>" \
       --env "NODE_IP=<NODE_IP>" \
@@ -531,7 +536,7 @@ Usage:
 ```console
     kubectl run test-agnhost \
       --generator=run-pod/v1 \
-      --image=us.gcr.io/k8s-artifacts-prod/e2e-test-images/agnhost:2.14 \
+      --image=k8s.gcr.io/e2e-test-images/agnhost:2.14 \
       --restart=Never \
       --env "BIND_ADDRESS=localhost" \
       --env "BIND_PORT=8080" \
@@ -659,6 +664,6 @@ The Windows `agnhost` image includes a `nc` binary that is 100% compliant with i
 
 ## Image
 
-The image can be found at `us.gcr.io/k8s-artifacts-prod/e2e-test-images/agnhost:2.14` for both Linux and
+The image can be found at `k8s.gcr.io/e2e-test-images/agnhost:2.14` for both Linux and
 Windows containers (based on `mcr.microsoft.com/windows/servercore:ltsc2019`,
 `mcr.microsoft.com/windows/servercore:1903`, and `mcr.microsoft.com/windows/servercore:1909`).

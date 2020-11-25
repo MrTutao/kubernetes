@@ -152,6 +152,7 @@ var (
 		"CPUManagerPolicy",
 		"CPUManagerReconcilePeriod.Duration",
 		"TopologyManagerPolicy",
+		"TopologyManagerScope",
 		"QOSReserved[*]",
 		"CgroupDriver",
 		"CgroupRoot",
@@ -166,6 +167,7 @@ var (
 		"EnableControllerAttachDetach",
 		"EnableDebuggingHandlers",
 		"EnableServer",
+		"EnableSystemLogHandler",
 		"EnforceNodeAllocatable[*]",
 		"EventBurst",
 		"EventRecordQPS",
@@ -182,6 +184,8 @@ var (
 		"HairpinMode",
 		"HealthzBindAddress",
 		"HealthzPort",
+		"Logging.Format",
+		"Logging.Sanitization",
 		"TLSCipherSuites[*]",
 		"TLSMinVersion",
 		"IPTablesDropBit",
@@ -230,5 +234,7 @@ var (
 		"TypeMeta.Kind",
 		"VolumeStatsAggPeriod.Duration",
 		"VolumePluginDir",
+		"ShutdownGracePeriod.Duration",
+		"ShutdownGracePeriodCriticalPods.Duration",
 	)
 )
